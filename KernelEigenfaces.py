@@ -108,30 +108,35 @@ def predictFaceRecong(train_proj, label, test_proj, testLabel):
             #print("predict : ", predict, "// True : ", testLabel[i])
         print(f'K neighbors={k}, Accuracy: {truePredict / test_proj.shape[1]:>.3f} ({truePredict}/{test_proj.shape[1]})')
         
-def linearKernel(X):
-    return X @ X.T
+def linearKernel(X, Y):
+    return X @ Y.T
 
-def polynomialKernel(X, gamma=1e-3, coef=0.7, degree=3):
-    return np.power(gamma * (X @ X.T) + coef, degree)
+def polynomialKernel(X, Y, gamma=1e-2, coef=0.1, degree=2):
+    return np.power(gamma * (X @ Y.T) + coef, degree)
 
-def rbfKernel(X, gamma=1e-7):
-    return np.exp(-gamma * scipy.spatial.distance.cdist(X, X, 'sqeuclidean'))
+def rbfKernel(X, Y, gamma=1e-8): #1 /(RESIZE[0] * RESIZE[1] * 255 * 255)
+    # dist = np.sum(X ** 2, axis=1).reshape(-1, 1) \
+    #     + np.sum(Y **2, axis=1) \
+    #         - 2 * X @ Y.T
+    # return np.exp(-gamma *  dist)
+    #print(scipy.spatial.distance.cdist(X, Y, 'sqeuclidean'))
+    return np.exp(-gamma * scipy.spatial.distance.cdist(X, Y, 'sqeuclidean'))
 
 def KernelPCA(train, K, method):
     # compute kernel
-    kernel = method(train)
+    kernel = method(train.T, train.T)
     one = np.full((kernel.shape[0], kernel.shape[0]), 1 / train.shape[1])
     # make the data to be centered already
     centeredKernel = kernel - one @ kernel - kernel @ one + one @ kernel @ one
     eigenValue, eigenVector = np.linalg.eigh(centeredKernel)
     
-    #index = np.argsort(eigenValue)
+    index = np.argsort(-eigenValue)
     # already sorted due to the implementation of eigh
-    W = eigenVector[:, -K:]
-    return W
+    W = eigenVector[:, :K]
+    return W, kernel
     
 def KernelLDA(train, K, method):
-    _kernel = method(train.T)
+    _kernel = method(train.T, train.T)
     
     # compute the between-class scatter and within-class scatter
     Z = np.full((_kernel.shape[0], _kernel.shape[0]), 1 / _kernel.shape[0])
@@ -144,7 +149,7 @@ def KernelLDA(train, K, method):
     #select the largest K fisherVector
     index = np.argsort(fisherValue)[::-1]
     W = fisherVector[:, index[: K]].real
-    return W
+    return W, _kernel
 
 def drawEigenFace(eigenFace, K, title):
     # for ploting multiple figures
@@ -181,7 +186,6 @@ def drawReconstructFace(avgFace, eigenFace, train, filename, randIndex, title):
     plt.subplots_adjust(top=0.9)        
     plt.savefig(title + "_Face_Reconstruct.png")
 
-
 if __name__ == '__main__':
     
     filename, label, train = readFile("./Yale_Face_Database/Training")
@@ -192,7 +196,8 @@ if __name__ == '__main__':
     #os.mkdir("LDA")
     
     print("-" * 10)
-    choice = input("1. Face Reconstruction:")
+    print("1.PCA/LDA Face Reconstruction, 2. PCA/LDA Face Recogntion, 3.Kernel PCA/LDA Face Recognition:")
+    choice = input()
     
     # show first 25 eigenFaces and fisherFaces and pick random 10 images to recontruct
     if choice == "1":
@@ -234,19 +239,23 @@ if __name__ == '__main__':
         kernel = [linearKernel, polynomialKernel, rbfKernel]
         for method in kernel:
             # PCA
-            eigenFace = KernelPCA(train, 25, method)
-            train_proj = eigenFace.T @ (train.T - avgFace).T 
-            test_proj = eigenFace.T @ (test - avgFace).T
+            eigenFace, GramMatrix = KernelPCA(train, 25, method)
+            train_proj = GramMatrix @ eigenFace
+            
+            testGramMatrix = method(test, train.T)
+            test_proj = testGramMatrix @ eigenFace
             print("-"*10, "Kernel PCA - ", str(method), "-"*10)
-            predictFaceRecong(train_proj, label, test_proj, testLabel)
+            predictFaceRecong(train_proj.T, label, test_proj.T, testLabel)
             
         for method in kernel:
             # LDA
-            fisherFace  = KernelLDA(train, 25, method)
-            train_proj = eigenFace.T @ (train.T - avgFace).T 
-            test_proj = eigenFace.T @ (test - avgFace).T
+            fisherFace, GramMatrix  = KernelLDA(train, 25, method)
+            train_proj = (GramMatrix) @ fisherFace
+            
+            testGramMatrix = method(test, train.T)
+            test_proj = testGramMatrix @ fisherFace
             print("-"*10, "Kernel LDA - ", str(method), "-"*10)
-            predictFaceRecong(train_proj, label, test_proj, testLabel)
+            predictFaceRecong(train_proj.T, label, test_proj.T, testLabel)
             
 
         
@@ -259,19 +268,6 @@ if __name__ == '__main__':
 imgArray = readPGM("./Yale_Face_Database/Training/subject01.centerlight.pgm")
 test = readPGM("./Yale_Face_Database/Training/subject01.happy.pgm")
 
-
-X = np.full((231, 231), 255)
-
-X[ : imgArray.shape[0], : imgArray.shape[1]] = imgArray
-
-meanX = np.average(X)
-S = 1 / imgArray.shape[0] * (X - meanX) @ (X - meanX).T
-
-eigenValue, eigenVector = np.linalg.eig(S)
-
-k = eigenVector[:, :25]
-z = X @ k @ k.T
-
-z = z.real
 """
 #plt.imshow((train[0] - mean).reshape(231, 195), cmap="gray")
+
