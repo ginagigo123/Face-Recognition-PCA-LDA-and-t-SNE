@@ -55,8 +55,10 @@ def PCA(train, K):
     for i in range(eigenVector.shape[1]):
         eigenVector[ :, i] = eigenVector[ :, i] / np.linalg.norm( eigenVector[:, i] )
         
-    # select the largest K eigenVector
-    W = eigenVector[: , -K:]
+    #select the largest K fisherVector
+    index = np.argsort(eigenValue)[::-1]
+    W = eigenVector[:, index[: K]].real
+    
     return avgFace, W
 
 def LDA(train, K):
@@ -232,6 +234,7 @@ if __name__ == '__main__':
         
         # Before doing kernel -> make the data centered!!!
         avgFace = np.mean(train, axis=1)
+
         train = (train.T - avgFace).T
         test = test - avgFace
         
@@ -256,14 +259,3 @@ if __name__ == '__main__':
             predictFaceRecong(train_proj.T, label, test_proj.T, testLabel)
             
 
-        
-        
-
-#plt.imshow((train[0] - mean).reshape(231, 195), cmap="gray")
-
-#1 /(RESIZE[0] * RESIZE[1] * 255 * 255)
-    # dist = np.sum(X ** 2, axis=1).reshape(-1, 1) \
-    #     + np.sum(Y **2, axis=1) \
-    #         - 2 * X @ Y.T
-    # return np.exp(-gamma *  dist)
-    #print(scipy.spatial.distance.cdist(X, Y, 'sqeuclidean'))
