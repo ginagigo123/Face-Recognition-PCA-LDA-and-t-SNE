@@ -17,13 +17,11 @@ K = [1, 3, 5, 7]
 subjectNum = 15
 
 #RESIZE = (231, 195)
+#RESIZE = (100, 100)
 RESIZE = (60, 50)
 
 def readPGM(file):
     with open(file, "rb") as f:
-        # f.readline() # P5
-        # f.readline() # Comment line
-        # width, height = [int(i) for i in f.readline().split()]
         img = Image.open(f)
         img = img.resize(RESIZE, Image.ANTIALIAS)        
         imgArray = np.array(img)
@@ -77,10 +75,10 @@ def LDA(train, K):
     for index, value in enumerate(np.unique(label)):
         xi = train[:, np.where(label == value)[0]].T
         dist1 = xi - mean[index]
-        Sw += scipy.spatial.distance.cdist(dist1.T, dist1.T, 'euclidean')
+        Sw += dist1.T @ dist1
         
         dist2 = (mean[index] - overallMean).reshape(1, -1)
-        Sb += len(np.where(label == value)[0]) * scipy.spatial.distance.cdist(dist2.T, dist2.T, 'euclidean')
+        Sb += len(np.where(label == value)[0]) * dist2.T @ dist2
     
     # compute for the eigenVector
     fisherValue, fisherVector = np.linalg.eig(np.linalg.pinv(Sw) @ Sb)
@@ -114,12 +112,7 @@ def linearKernel(X, Y):
 def polynomialKernel(X, Y, gamma=1e-2, coef=0.1, degree=2):
     return np.power(gamma * (X @ Y.T) + coef, degree)
 
-def rbfKernel(X, Y, gamma=1e-8): #1 /(RESIZE[0] * RESIZE[1] * 255 * 255)
-    # dist = np.sum(X ** 2, axis=1).reshape(-1, 1) \
-    #     + np.sum(Y **2, axis=1) \
-    #         - 2 * X @ Y.T
-    # return np.exp(-gamma *  dist)
-    #print(scipy.spatial.distance.cdist(X, Y, 'sqeuclidean'))
+def rbfKernel(X, Y, gamma=1e-8): 
     return np.exp(-gamma * scipy.spatial.distance.cdist(X, Y, 'sqeuclidean'))
 
 def KernelPCA(train, K, method):
@@ -127,12 +120,13 @@ def KernelPCA(train, K, method):
     kernel = method(train.T, train.T)
     one = np.full((kernel.shape[0], kernel.shape[0]), 1 / train.shape[1])
     # make the data to be centered already
-    centeredKernel = kernel - one @ kernel - kernel @ one + one @ kernel @ one
-    eigenValue, eigenVector = np.linalg.eigh(centeredKernel)
+    #centeredKernel = kernel - one @ kernel - kernel @ one + one @ kernel @ one
+    #eigenValue, eigenVector = np.linalg.eigh(centeredKernel)
+    eigenValue, eigenVector = np.linalg.eigh(kernel)
     
-    index = np.argsort(-eigenValue)
+    index = np.argsort(eigenValue)[::-1]
     # already sorted due to the implementation of eigh
-    W = eigenVector[:, :K]
+    W = eigenVector[:, index[:K]].real
     return W, kernel
     
 def KernelLDA(train, K, method):
@@ -156,12 +150,12 @@ def drawEigenFace(eigenFace, K, title):
     fig, ax = plt.subplots(5, 5, figsize=(8, 8), squeeze=False)
     fig.tight_layout(pad = 3.0)
     
-    fig.suptitle(title, fontsize=16)
+    fig.suptitle(title[4:], fontsize=16)
     for i in range(K):
         # original image
         r, c = i // 5, i % 5
         ax[r][c].imshow(eigenFace[:, i].reshape(RESIZE[1], RESIZE[0]), cmap="gray")
-        ax[r][c].set_title(title[3:] + "_" + str(i))
+        ax[r][c].set_title("Eigenface_" + str(i))
     
     plt.subplots_adjust(top=0.9)
     plt.savefig(title)
@@ -176,14 +170,15 @@ def drawReconstructFace(avgFace, eigenFace, train, filename, randIndex, title):
         img = train[:, value]
         projection = eigenFace.T @ (img - avgFace)
         reFace = eigenFace @ projection + avgFace
-        
+        if title[:3] == "LDA":
+            reFace = eigenFace @ projection
         r, c = index // 5 * 2, index % 5
         ax[r][c].imshow(train[:, value].reshape(RESIZE[1], RESIZE[0]), cmap="gray")
         ax[r][c].set_title("original")
         
         ax[r+1][c].imshow(reFace.reshape(RESIZE[1], RESIZE[0]), cmap="gray")
         ax[r+1][c].set_title(filename[value])
-    plt.subplots_adjust(top=0.9)        
+    plt.subplots_adjust(top=0.9)      
     plt.savefig(title + "_Face_Reconstruct.png")
 
 if __name__ == '__main__':
@@ -204,18 +199,19 @@ if __name__ == '__main__':
         # PCA
         avgFace, eigenFace = PCA(train, 25)
         randIndex = np.random.choice(train.shape[1], 10, replace=False)
-        
+
         # ploting
         drawEigenFace(eigenFace, 25, "PCA/PCA EigenSpace")
         drawReconstructFace(avgFace, eigenFace, train, filename, randIndex, "PCA/PCA")
+        
         
         # # LDA
         avgFace, fisherFace = LDA(train, 25)
         randIndex = np.random.choice(train.shape[1], 10, replace=False)
         
         # ploting
-        drawEigenFace(fisherFace, 25, "LDA/LDA fisherSpace1")
-        drawReconstructFace(avgFace, fisherFace, train, filename, randIndex, "LDA/LDA1")
+        drawEigenFace(fisherFace, 25, "LDA/LDA fisherSpace")
+        drawReconstructFace(avgFace, fisherFace, train, filename, randIndex, "LDA/LDA")
     
     # face recognition, predict the test (knn) and output performance
     elif choice == "2":
@@ -237,6 +233,11 @@ if __name__ == '__main__':
     else:
         # Kernel PCA and LDA
         kernel = [linearKernel, polynomialKernel, rbfKernel]
+        
+        avgFace = np.mean(train, axis=1)
+        train = (train.T - avgFace).T
+        test = test - avgFace
+        
         for method in kernel:
             # PCA
             eigenFace, GramMatrix = KernelPCA(train, 25, method)
@@ -261,13 +262,11 @@ if __name__ == '__main__':
         
         
 
-
-"""
-#plt.imshow((avgFace).reshape(50, 60), cmap="gray")
-
-imgArray = readPGM("./Yale_Face_Database/Training/subject01.centerlight.pgm")
-test = readPGM("./Yale_Face_Database/Training/subject01.happy.pgm")
-
-"""
 #plt.imshow((train[0] - mean).reshape(231, 195), cmap="gray")
 
+#1 /(RESIZE[0] * RESIZE[1] * 255 * 255)
+    # dist = np.sum(X ** 2, axis=1).reshape(-1, 1) \
+    #     + np.sum(Y **2, axis=1) \
+    #         - 2 * X @ Y.T
+    # return np.exp(-gamma *  dist)
+    #print(scipy.spatial.distance.cdist(X, Y, 'sqeuclidean'))

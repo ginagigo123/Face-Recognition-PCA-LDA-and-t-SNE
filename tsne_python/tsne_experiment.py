@@ -17,9 +17,11 @@ import numpy as np
 # for visualization
 import matplotlib.pyplot as plt
 from util import exportGif
+import os
 
 # Turn interactive plotting off
 plt.ioff()
+INITIAL_Y = 0
 
 def visualize(Y, labels, title, folder, filename):
     plt.clf()
@@ -119,7 +121,8 @@ def pca(X=np.array([]), no_dims=50):
     return Y
 
 
-def tsne(X=np.array([]), labels=np.array([]), no_dims=2, initial_dims=50, perplexity=30.0, plot=False):
+def tsne(X=np.array([]), labels=np.array([]), no_dims=2, initial_dims=50, perplexity=30.0, plot=False, filePath="2"):
+    global INITIAL_Y
     """
         Runs t-SNE on the dataset in the NxD array X to reduce its
         dimensionality to no_dims dimensions. The syntaxis of the function is
@@ -142,7 +145,11 @@ def tsne(X=np.array([]), labels=np.array([]), no_dims=2, initial_dims=50, perple
     final_momentum = 0.8
     eta = 500
     min_gain = 0.01
-    Y = np.random.randn(n, no_dims)
+    #Y = np.random.randn(n, no_dims)
+    if isinstance(INITIAL_Y, int):
+        INITIAL_Y = np.random.randn(n, no_dims)
+    Y = INITIAL_Y
+    
     dY = np.zeros((n, no_dims))
     iY = np.zeros((n, no_dims))
     gains = np.ones((n, no_dims))
@@ -195,13 +202,14 @@ def tsne(X=np.array([]), labels=np.array([]), no_dims=2, initial_dims=50, perple
             title = "t-SNE Embedding " + \
                     "perplexity=" + str(perplexity) \
                      + " iter=" + str(iter)
-            visualize(Y, labels, title, "2/tSNE2", "tSNE_" + str(iter) +".png")
+            visualize(Y, labels, title, filePath, "tSNE_" + str(iter) +".png")
 
     # Return solution
     return Y, P, Q
 
 # symmetric
-def sne(X=np.array([]), no_dims=2, initial_dims=50, perplexity=30.0):
+def sne(X=np.array([]), no_dims=2, initial_dims=50, perplexity=30.0, plot=False, filePath="2"):
+    global INITIAL_Y
     """
         Runs symmetric-SNE on the dataset in the NxD array X to reduce its
         dimensionality to no_dims dimensions. The syntaxis of the function is
@@ -224,7 +232,10 @@ def sne(X=np.array([]), no_dims=2, initial_dims=50, perplexity=30.0):
     final_momentum = 0.8
     eta = 500
     min_gain = 0.01
-    Y = np.random.randn(n, no_dims)
+    #Y = np.random.randn(n, no_dims)
+    if isinstance(INITIAL_Y, int):
+        INITIAL_Y = np.random.randn(n, no_dims)
+    Y = INITIAL_Y
     dY = np.zeros((n, no_dims))
     iY = np.zeros((n, no_dims))
     gains = np.ones((n, no_dims))
@@ -274,11 +285,11 @@ def sne(X=np.array([]), no_dims=2, initial_dims=50, perplexity=30.0):
         if iter == 100:
             P = P / 4.
             
-        if iter % 50 == 0:
+        if plot == True and iter % 50 == 0:
             title = "symmetric SNE Embedding " + \
                     "perplexity=" + str(perplexity) \
                      + " iter=" + str(iter)
-            visualize(Y, labels, title, "2/SNE2", "SNE_" + str(iter) +".png")
+            visualize(Y, labels, title, filePath, "SNE_" + str(iter) +".png")
 
     # Return solution
     return Y, P, Q
@@ -301,8 +312,10 @@ def plotSimilarity(P, Q, labels, subtitle, filepath, filename):
     axes[0][1].set_title("In Low dimension")
     
     fig.colorbar(im2, ax = axes.ravel().tolist())
-    plt.show()
+    #plt.show()
     plt.savefig(filepath + "/" + filename)
+   
+    
 
 if __name__ == "__main__":
     print("Run Y = tsne.tsne(X, no_dims, perplexity) to perform t-SNE on your dataset.")
@@ -310,18 +323,31 @@ if __name__ == "__main__":
     
     X = np.loadtxt("tsne_python/mnist2500_X.txt")
     labels = np.loadtxt("tsne_python/mnist2500_labels.txt")
-    # t-sne
-    Y, P, Q = tsne(X, labels, 2, 50, 20.0)
-    # visualize
-    #visualize(Y, labels, "t-SNE Embedding perplexity=30 iter 1000", "2/tSNE2", "tSNE_1000.png")
-    plotSimilarity(P, Q, labels, "tSNE pairwise similarity"\
-                   , "2", "tSNE similarity.png")
-    exportGif("2/tSNE2", "SNE")
     
-    # sne
-    _Y, _P, _Q = sne(X, 2, 50, 20.0)
-    # visualize
-    visualize(_Y, labels, "symmetric SNE Embedding perplexity=30 iter 1000", "2/SNE2", "SNE_1000.png")
-    plotSimilarity(_P, _Q, labels, "symmetric SNE pairwise similarity"\
-                   , "2", "symmetric similarity.png")
-    exportGif("2/SNE2", "SNE")
+    Perplexity = [5, 10, 50, 100]
+
+    for p in Perplexity:
+        if p != 5:
+            filePath = "2/tSNE_" + "perplexity_" + str(p)
+            if not os.path.exists(filePath):
+                os.makedirs(filePath)
+            
+            # t-sne
+            Y, P, Q = tsne(X, labels, 2, 50, p, True, filePath)
+            # visualize
+            visualize(Y, labels, "t-SNE Embedding perplexity="+str(p)+" iter 1000", filePath, "tSNE_1000.png")
+            plotSimilarity(P, Q, labels, "tSNE pairwise similarity"\
+                           , filePath, "tSNE similarity.png")
+            exportGif(filePath, "tSNE")
+        
+            # sne
+            filePath = "2/SNE_" + "perplexity_" + str(p)
+            if not os.path.exists(filePath):
+                os.makedirs(filePath)
+                
+            _Y, _P, _Q = sne(X, 2, 50, p, True, filePath)
+            # visualize
+            visualize(_Y, labels, "symmetric SNE Embedding perplexity="+str(p)+" iter 1000", filePath, "SNE_1000.png")
+            plotSimilarity(_P, _Q, labels, "symmetric SNE pairwise similarity"\
+                           , filePath, "symmetric similarity.png")
+            exportGif(filePath, "SNE")
