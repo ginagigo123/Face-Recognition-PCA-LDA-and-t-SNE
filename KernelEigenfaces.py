@@ -118,10 +118,6 @@ def rbfKernel(X, Y, gamma=1e-8):
 def KernelPCA(train, K, method):
     # compute kernel
     kernel = method(train.T, train.T)
-    one = np.full((kernel.shape[0], kernel.shape[0]), 1 / train.shape[1])
-    # make the data to be centered already
-    #centeredKernel = kernel - one @ kernel - kernel @ one + one @ kernel @ one
-    #eigenValue, eigenVector = np.linalg.eigh(centeredKernel)
     eigenValue, eigenVector = np.linalg.eigh(kernel)
     
     index = np.argsort(eigenValue)[::-1]
@@ -234,6 +230,7 @@ if __name__ == '__main__':
         # Kernel PCA and LDA
         kernel = [linearKernel, polynomialKernel, rbfKernel]
         
+        # Before doing kernel -> make the data centered!!!
         avgFace = np.mean(train, axis=1)
         train = (train.T - avgFace).T
         test = test - avgFace
