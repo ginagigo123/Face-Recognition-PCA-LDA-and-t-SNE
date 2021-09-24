@@ -23,4 +23,6 @@ def exportGif(filePath, imgName):
     # create a folder
     # if not os.path.exists(filePath +"/gif"):
     #     os.makedirs(filePath +"/gif") 
-    imageio.mimsave(filePath +"/" + imgName + ".gif", images, duration= 0.5)  #"/gif/"
+    imageio.mimsave(filePath +"/" + imgName + ".gif", images, duration= 1)  #"/gif/"
+    
+exportGif("C:\D_Drive\gina\大學課程\四下\deep learning\Final\images\yolo", "yolo")
